@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 7.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/main/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/main/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/main/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/main/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/main/css/main.css">
+
+
+<link rel="stylesheet" href="/main/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"liutom445.github.io","root":"/main/","scheme":"Muse","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="This technical report details the Variational Expectation-Maximization (EM) algorithm and its application in Latent Dirichlet Allocation (LDA) for MIMIC-IV clinical notes.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Variational EM and LDA for MIMIC-IV Clinical Notes">
+<meta property="og:url" content="https://liutom445.github.io/2025/02/19/mimiclda/index.html">
+<meta property="og:site_name" content="Tom Liu">
+<meta property="og:description" content="This technical report details the Variational Expectation-Maximization (EM) algorithm and its application in Latent Dirichlet Allocation (LDA) for MIMIC-IV clinical notes.">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2025-02-19T21:00:00.000Z">
+<meta property="article:modified_time" content="2025-02-19T20:41:26.776Z">
+<meta property="article:author" content="Tom Liu">
+<meta property="article:tag" content="EHR">
+<meta property="article:tag" content="NLP">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://liutom445.github.io/2025/02/19/mimiclda/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Variational EM and LDA for MIMIC-IV Clinical Notes | Tom Liu</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/main/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Tom Liu</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">I am a PhD student in the Department of Biostatistics, School of Public Health, University of Michigan. My research interests are in causal inference, and randomized clinical trials.</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/main/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/main/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/main/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/main/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/main/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://liutom445.github.io/2025/02/19/mimiclda/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/main/images/avatar.gif">
+      <meta itemprop="name" content="Tom Liu">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Tom Liu">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Variational EM and LDA for MIMIC-IV Clinical Notes
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2025-02-19 16:00:00 / Modified: 15:41:26" itemprop="dateCreated datePublished" datetime="2025-02-19T16:00:00-05:00">2025-02-19</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/main/categories/Research/" itemprop="url" rel="index"><span itemprop="name">Research</span></a>
+                </span>
+                  , 
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/main/categories/Research/Notes/" itemprop="url" rel="index"><span itemprop="name">Notes</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>This technical report details the <strong>Variational Expectation-Maximization (EM)</strong> algorithm and its application in <strong>Latent Dirichlet Allocation (LDA)</strong> for <strong>MIMIC-IV</strong> clinical notes.</p>
+<span id="more"></span>
+
+<p> We will:</p>
+<ol>
+<li>Discuss how <strong>Python</strong> (e.g., via <strong>Gensim</strong>) implements <strong>Variational EM</strong> within LDA.  </li>
+<li>Present <strong>MIMIC-IV</strong> as an example data source, describing how unstructured clinical text can be modeled.  </li>
+<li>Provide a <strong>Results</strong> section with our latest <strong>LDA topic assignment output</strong> for a small sample of data.</li>
+</ol>
+<p>Below is the entire discussion in Markdown format for easy reference and reading.</p>
+<hr>
+<h2 id="1-Introduction"><a href="#1-Introduction" class="headerlink" title="1. Introduction"></a>1. Introduction</h2><p><strong>Latent Dirichlet Allocation (LDA)</strong> is a popular <strong>unsupervised</strong> algorithm for <strong>topic modeling</strong>, aiming to identify latent thematic clusters (topics) within a corpus of text documents. Each document is represented as a mixture of multiple topics, and each topic is characterized by a distribution over words in the vocabulary.</p>
+<h3 id="1-1-The-Intractability-Problem"><a href="#1-1-The-Intractability-Problem" class="headerlink" title="1.1 The Intractability Problem"></a>1.1 The Intractability Problem</h3><p>Exact inference of the hidden (latent) topic structure in LDA is <strong>intractable</strong> due to the exponential number of possible topic assignments. As a result, <strong>approximate</strong> inference methods must be used. Two well-known approaches are:</p>
+<ul>
+<li><strong>Gibbs Sampling</strong> (a Markov Chain Monte Carlo technique)  </li>
+<li><strong>Variational Inference</strong> (a deterministic alternative using Variational EM)</li>
+</ul>
+<p>In this report, we focus on <strong>Variational EM</strong>, which provides a scalable and often faster convergence method for large text datasets like <strong>MIMIC-IV</strong>.</p>
+<hr>
+<h2 id="2-Data-Description-MIMIC-IV-Clinical-Notes"><a href="#2-Data-Description-MIMIC-IV-Clinical-Notes" class="headerlink" title="2. Data Description: MIMIC-IV Clinical Notes"></a>2. Data Description: MIMIC-IV Clinical Notes</h2><p>The <strong>MIMIC-IV</strong> database is a large, deidentified dataset containing:</p>
+<ul>
+<li>Structured data: Diagnoses, labs, vitals, demographic info.</li>
+<li>Unstructured data: <strong>Clinical notes</strong> (discharge summaries, radiology reports, etc.).</li>
+</ul>
+<p>For <strong>topic modeling</strong>, we specifically look at <strong>free-text</strong> clinical notes. These can be <strong>long</strong>, contain medical abbreviations, and vary significantly in structure. Below is our workflow to prepare this text:</p>
+<ol>
+<li><strong>Cleaning</strong>:  <ul>
+<li>Remove placeholders (<code>___</code>), punctuation, numbers, or domain-specific artifacts.</li>
+</ul>
+</li>
+<li><strong>Normalization</strong>:  <ul>
+<li>Convert text to lowercase, unify spacing.</li>
+</ul>
+</li>
+<li><strong>Stopword Removal</strong>:  <ul>
+<li>Exclude common words (e.g., “the,” “and,” “of”) and any custom domain tokens that do not aid in meaning (e.g., “left,” “right,” “rrrr”).</li>
+</ul>
+</li>
+<li><strong>Bag-of-Words Representation</strong>:  <ul>
+<li>Transform each note into a histogram of word occurrences for downstream LDA processing.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2 id="3-Theoretical-Foundations"><a href="#3-Theoretical-Foundations" class="headerlink" title="3. Theoretical Foundations"></a>3. Theoretical Foundations</h2><h3 id="3-1-Latent-Dirichlet-Allocation-LDA"><a href="#3-1-Latent-Dirichlet-Allocation-LDA" class="headerlink" title="3.1 Latent Dirichlet Allocation (LDA)"></a>3.1 Latent Dirichlet Allocation (LDA)</h3><p><strong>LDA</strong> proposes a <strong>generative story</strong> for documents:</p>
+<ol>
+<li>Each corpus has a fixed number of topics (K).  </li>
+<li>Each document ( d ) is associated with a topic proportion (\theta_d).  </li>
+<li>For each word (w) in document (d):<ul>
+<li>Draw a <strong>topic assignment</strong> (z) from (\theta_d).</li>
+<li>Then draw word ( w ) from the selected topic’s word distribution (\phi_{z}).</li>
+</ul>
+</li>
+</ol>
+<p>Because these topic assignments and proportions are unobserved, LDA is a <strong>latent variable</strong> model.</p>
+<h3 id="3-2-Variational-EM"><a href="#3-2-Variational-EM" class="headerlink" title="3.2 Variational EM"></a>3.2 Variational EM</h3><p>The <strong>Expectation-Maximization (EM)</strong> algorithm in a latent-variable setting alternates:</p>
+<ul>
+<li><strong>E-step</strong>: Compute the <strong>expected</strong> posterior distribution over hidden variables.  </li>
+<li><strong>M-step</strong>: Update model parameters to maximize the likelihood under that distribution.</li>
+</ul>
+<p>However, the <strong>exact</strong> posterior in LDA is <strong>intractable</strong>, so we use <strong>Variational</strong> EM:</p>
+<ul>
+<li><strong>Variational E-step</strong>:  <ul>
+<li>We introduce a <em>simpler</em> distribution (q(\theta, z)) to approximate the true posterior (p(\theta, z \mid w)).  </li>
+<li>Update the parameters of (q) to minimize KL divergence between (q) and the true posterior.</li>
+</ul>
+</li>
+<li><strong>Variational M-step</strong>:  <ul>
+<li>Update the global parameters (e.g., topic-word distributions (\phi)) by <strong>maximizing</strong> the <strong>evidence lower bound (ELBO)</strong> using the current (q).</li>
+</ul>
+</li>
+</ul>
+<p>This two-step iteration is repeated until convergence. Variational EM is more <strong>deterministic</strong> than sampling methods (like Gibbs Sampling) and often <strong>converges faster</strong> on large corpora.</p>
+<hr>
+<h2 id="4-How-Python-Implements-Variational-EM-in-LDA"><a href="#4-How-Python-Implements-Variational-EM-in-LDA" class="headerlink" title="4. How Python Implements Variational EM in LDA"></a>4. <strong>How Python Implements Variational EM in LDA</strong></h2><p>In <strong>Python</strong>, a common implementation for LDA is via the <strong>Gensim</strong> library:</p>
+<ul>
+<li><strong>Gensim’s <code>LdaModel</code></strong> <a target="_blank" rel="noopener" href="https://radimrehurek.com/gensim/models/ldamodel.html">documentation</a> explains that the underlying approach is a <strong>variational Bayes</strong> (VB) method or <strong>online variational Bayes</strong> for large corpora.  </li>
+<li>The library:<ol>
+<li>Initializes random or heuristic distributions for topics.</li>
+<li>Performs the <strong>Variational E-step</strong> by updating, for each document, the approximate posterior of topics for each word.  </li>
+<li>In the <strong>M-step</strong>, updates the global topic-word probabilities (\phi) to incorporate the newly estimated document-level topic assignments.  </li>
+<li>Often uses an <strong>“online”</strong> variant of variational EM, processing mini-batches of documents instead of the entire corpus at once, to improve scalability.</li>
+</ol>
+</li>
+</ul>
+<p>Hence, <strong>Python</strong> (through <strong>Gensim</strong>) relies on <strong>variational EM</strong> to approximate the LDA posterior in a memory-efficient and iterative manner, suitable for large MIMIC-IV notes.</p>
+<hr>
+<h2 id="5-Application-to-Our-Data"><a href="#5-Application-to-Our-Data" class="headerlink" title="5. Application to Our Data"></a>5. Application to Our Data</h2><h3 id="5-1-Setup"><a href="#5-1-Setup" class="headerlink" title="5.1 Setup"></a>5.1 Setup</h3><ol>
+<li><strong>Preprocess</strong> 5 sample MIMIC-IV notes (a small demonstration subset).  </li>
+<li><strong>Set</strong> number of topics (K).  </li>
+<li><strong>Train</strong> the LDA model with the Python approach described above:<ul>
+<li>Gensim’s <code>LdaModel(corpus=..., num_topics=K, ...)</code> function.  </li>
+<li>This function automatically performs the <strong>variational</strong> E- and M- steps under the hood.</li>
+</ul>
+</li>
+</ol>
+<h3 id="5-2-Results-Latest-Topic-Assignment-Output"><a href="#5-2-Results-Latest-Topic-Assignment-Output" class="headerlink" title="5.2 Results: Latest Topic Assignment Output"></a>5.2 Results: Latest Topic Assignment Output</h3><p>Below is an example of <strong>5-topic</strong> LDA output (the top 10 words in each topic) after running <strong>variational EM</strong> on a sample dataset. This is representative of how each topic lumps together common terms:</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">=== LDA Topics ===</span><br><span class="line">Topic 0: 0.017*&quot;head&quot; + 0.012*&quot;ct&quot; + 0.011*&quot;contrast&quot; + 0.010*&quot;images&quot; + 0.010*&quot;evidence&quot; + 0.009*&quot;hemorrhage&quot; + 0.009*&quot;acute&quot; + 0.009*&quot;axial&quot; + 0.008*&quot;mass&quot; + 0.008*&quot;technique&quot;</span><br><span class="line">Topic 1: 0.017*&quot;normal&quot; + 0.013*&quot;cm&quot; + 0.011*&quot;ct&quot; + 0.011*&quot;contrast&quot; + 0.011*&quot;evidence&quot; + 0.010*&quot;abdomen&quot; + 0.009*&quot;pelvis&quot; + 0.009*&quot;within&quot; + 0.009*&quot;mm&quot; + 0.008*&quot;liver&quot;</span><br><span class="line">Topic 2: 0.039*&quot;chest&quot; + 0.020*&quot;pleural&quot; + 0.016*&quot;effusion&quot; + 0.016*&quot;comparison&quot; + 0.014*&quot;pulmonary&quot; + 0.013*&quot;pneumothorax&quot; + 0.012*&quot;lung&quot; + 0.011*&quot;tube&quot; + 0.010*&quot;radiograph&quot; + 0.009*&quot;unchanged&quot;</span><br><span class="line">Topic 3: 0.018*&quot;fracture&quot; + 0.010*&quot;comparison&quot; + 0.009*&quot;joint&quot; + 0.008*&quot;views&quot; + 0.008*&quot;seen&quot; + 0.008*&quot;femoral&quot; + 0.007*&quot;knee&quot; + 0.007*&quot;veins&quot; + 0.007*&quot;patient&quot; + 0.006*&quot;catheter&quot;</span><br><span class="line">Topic 4: 0.015*&quot;spine&quot; + 0.014*&quot;breast&quot; + 0.010*&quot;disc&quot; + 0.010*&quot;narrowing&quot; + 0.009*&quot;spinal&quot; + 0.009*&quot;ultrasound&quot; + 0.009*&quot;mild&quot; + 0.009*&quot;lumbar&quot; + 0.008*&quot;comparison&quot; + 0.008*&quot;cm&quot;</span><br></pre></td></tr></table></figure>
+
+<p>An <strong>interpretation</strong> might be:</p>
+<ul>
+<li><strong>Topic 0</strong>: Head&#x2F;brain imaging (words “head,” “hemorrhage,” “acute,” “axial,” “ct”).  </li>
+<li><strong>Topic 1</strong>: Abdominal&#x2F;pelvis imaging references (words “abdomen,” “pelvis,” “cm,” “mm,” “liver”).  </li>
+<li><strong>Topic 2</strong>: Chest imaging (words “chest,” “pleural,” “effusion,” “pulmonary,” “pneumothorax”).  </li>
+<li><strong>Topic 3</strong>: Musculoskeletal or orthopedic imaging (“fracture,” “joint,” “knee,” “femoral”).  </li>
+<li><strong>Topic 4</strong>: Spine imaging references (words “spine,” “disc,” “narrowing,” “lumbar,” “ultrasound”).</li>
+</ul>
+<p><strong>Note</strong>: This is an <strong>unsupervised</strong> grouping. The topics are discovered solely by analyzing word co-occurrences.</p>
+<hr>
+<h2 id="6-Conclusion"><a href="#6-Conclusion" class="headerlink" title="6. Conclusion"></a>6. Conclusion</h2><ol>
+<li><strong>LDA</strong>: A <strong>generative</strong> model that posits each clinical note in MIMIC-IV is a mixture of hidden topics, each topic being a word distribution.</li>
+<li><strong>Variational EM</strong>: An efficient <strong>approximate</strong> inference technique. Python libraries like <strong>Gensim</strong> implement <strong>Variational Bayes</strong> to handle large corpora, iteratively refining the posterior until convergence.</li>
+<li><strong>Relevance</strong>: In <strong>MIMIC-IV</strong>, such topic modeling can <strong>uncover underlying themes</strong> across discharge summaries, radiology reports, and more—e.g., “HIV medication,” “ascites management,” “pulmonary diagnoses,” or “neurological imaging.” Even with small samples, the approach is <strong>pertinent</strong> because it:<ul>
+<li>Does <strong>not</strong> require labeled data.</li>
+<li>Quickly yields interpretable clusters of text.</li>
+</ul>
+</li>
+</ol>
+<p><strong>Next Steps</strong>:</p>
+<ul>
+<li><strong>Scale</strong> the approach to hundreds or thousands of MIMIC-IV notes.  </li>
+<li>Combine domain-specific tokens (like ICD-10 codes) or do concept extraction to further refine the topics.  </li>
+<li>Evaluate or validate whether discovered topics align with known clinical categories.</li>
+</ul>
+<hr>
+<h3 id="References"><a href="#References" class="headerlink" title="References"></a>References</h3><ul>
+<li>Blei, Ng, Jordan (2003). <a target="_blank" rel="noopener" href="http://www.jmlr.org/papers/v3/blei03a.html"><em>Latent Dirichlet Allocation</em></a>. <em>Journal of Machine Learning Research</em>.</li>
+<li><a target="_blank" rel="noopener" href="https://chrischoy.github.io/research/Expectation-Maximization-and-Variational-Inference/"><strong>Chris Choy</strong>: EM and Variational Inference Blog</a>.</li>
+<li><a target="_blank" rel="noopener" href="https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm"><strong>Wikipedia</strong>: Expectation–Maximization Algorithm</a>.</li>
+<li><strong>Gensim</strong> <a target="_blank" rel="noopener" href="https://radimrehurek.com/gensim/models/ldamodel.html">LDA Documentation</a> (implementation details for Python).</li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/main/tags/EHR/" rel="tag"># EHR</a>
+              <a href="/main/tags/NLP/" rel="tag"># NLP</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/main/2025/02/16/hello-world/" rel="prev" title="Hello World">
+      <i class="fa fa-chevron-left"></i> Hello World
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-Introduction"><span class="nav-number">1.</span> <span class="nav-text">1. Introduction</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-1-The-Intractability-Problem"><span class="nav-number">1.1.</span> <span class="nav-text">1.1 The Intractability Problem</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-Data-Description-MIMIC-IV-Clinical-Notes"><span class="nav-number">2.</span> <span class="nav-text">2. Data Description: MIMIC-IV Clinical Notes</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-Theoretical-Foundations"><span class="nav-number">3.</span> <span class="nav-text">3. Theoretical Foundations</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#3-1-Latent-Dirichlet-Allocation-LDA"><span class="nav-number">3.1.</span> <span class="nav-text">3.1 Latent Dirichlet Allocation (LDA)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-2-Variational-EM"><span class="nav-number">3.2.</span> <span class="nav-text">3.2 Variational EM</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-How-Python-Implements-Variational-EM-in-LDA"><span class="nav-number">4.</span> <span class="nav-text">4. How Python Implements Variational EM in LDA</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-Application-to-Our-Data"><span class="nav-number">5.</span> <span class="nav-text">5. Application to Our Data</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#5-1-Setup"><span class="nav-number">5.1.</span> <span class="nav-text">5.1 Setup</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-2-Results-Latest-Topic-Assignment-Output"><span class="nav-number">5.2.</span> <span class="nav-text">5.2 Results: Latest Topic Assignment Output</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#6-Conclusion"><span class="nav-number">6.</span> <span class="nav-text">6. Conclusion</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#References"><span class="nav-number">6.1.</span> <span class="nav-text">References</span></a></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">Tom Liu</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/main/archives/">
+        
+          <span class="site-state-item-count">3</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+        <span class="site-state-item-count">3</span>
+        <span class="site-state-item-name">categories</span>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">4</span>
+        <span class="site-state-item-name">tags</span>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2025</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Tom Liu</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://muse.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Muse</a>
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/main/lib/anime.min.js"></script>
+  <script src="/main/lib/velocity/velocity.min.js"></script>
+  <script src="/main/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/main/js/utils.js"></script>
+
+<script src="/main/js/motion.js"></script>
+
+
+<script src="/main/js/schemes/muse.js"></script>
+
+
+<script src="/main/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>
